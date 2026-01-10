@@ -1,13 +1,13 @@
 # 🌌 Fourier Oracle: Mathematical Art Visualizer
 
-**Fourier Oracle**은 복잡한 기히학적 형태를 푸리에 급수(Fourier Series)를 통해 분해하고 재구성하는 인터랙티브 시각화 프로젝트입니다. 사용자의 드로잉이나 수학적 시드(Seed)를 바탕으로 화려한 푸리에 에피사이클(Epicycles) 애니메이션을 생성합니다.
+**Fourier Oracle** is an interactive visualization project that decomposes and reconstructs complex geometric shapes using Fourier Series. It creates dazzling Fourier Epicycle animations based on user drawings or mathematical seeds.
 
 ## ✨ Key Features
 
-- **Interactive DFT Drawing**: 사용자로부터 입력받은 자유 곡선을 이산 푸리에 변환(Discrete Fourier Transform)을 통해 수학적 조화 함수로 변환합니다.
-- **Mathematical Seed Gallery**: 리사주(Lissajous), 하이포트로코이드(Hypotrochoid), 인피니티 곡선 등 아름다운 수학적 기하학 형태를 즉시 시각화합니다.
-- **Dynamic Multi-color System**: 주파수와 주기에 따른 실시간 무지개 그라데이션 및 네온 글로우 효과를 적용했습니다.
-- **Meditative Animation**: 0.1x 초감속 모드와 무한 롤링 트레일을 통해 수학적 생성 과정을 명상적인 비주얼로 표현합니다.
+- **Interactive DFT Drawing**: Transforms freehand curves drawn by users into mathematical harmonic functions using the Discrete Fourier Transform (DFT).
+- **Mathematical Seed Gallery**: Instantly visualizes beautiful mathematical geometric shapes such as Lissajous, Hypotrochoid, and Infinity curves.
+- **Dynamic Multi-color System**: Applies real-time rainbow gradients and neon glow effects based on frequency and period.
+- **Meditative Animation**: Provides a meditative visual experience through 0.1x ultra-slow motion modes and infinite rolling trails.
 
 ## 🛠 Tech Stack
 
@@ -17,24 +17,24 @@
 
 ## 📁 Project Structure
 
-- `src/components/FourierCanvas2D.jsx`: 2D 푸리에 시각화 및 UI 핵심 컴포넌트 (Stable)
-- `src/components/FourierCanvas3D.jsx`: 3D 푸리에 시각화 컴포넌트 (Planned)
-- `src/lib/dft.js`: 이산 푸리에 변환(DFT) 수학 로직
-- `src/styles/`: 전역 테마 및 디자인 시스템
+- `src/components/FourierCanvas2D.jsx`: Core 2D Fourier visualization & UI component (Stable)
+- `src/components/FourierCanvas3D.jsx`: 3D Fourier visualization component (Planned)
+- `src/lib/dft.js`: Discrete Fourier Transform (DFT) mathematical logic
+- `src/styles/`: Global themes and design system
 
 ## 🚀 Recent Updates (v1.1 - Mobile UX Refined)
 
-- **Mobile First Designs**: 햄버거 메뉴(☰), 드롭다운 설정 패널 등 모바일 친화적 UI 전면 개편.
-- **Responsive Canvas**: 화면 크기 변화에 따라 시드 그림과 궤적의 크기가 실시간으로 자동 축소/확대되는 반응형 로직 구현.
-- **Enhanced Dock**: 모바일 최적화된 하단 플로팅 도크 및 개선된 셔플(Shuffle) 로직 적용.
+- **Mobile First Designs**: Fully revamped mobile-friendly UI including Hamburger Menu (☰) and Drop-down Settings Panel.
+- **Responsive Canvas**: Implemented responsive logic where seed drawings and trails automatically scale in real-time with screen size changes.
+- **Enhanced Dock**: Applied mobile-optimized floating dock and improved Shuffle logic.
 
 ## 📄 Documentation
 
-상세한 구현 내역 및 기술적 최적화 과정은 다음 문서를 참고하세요:
+For detailed implementation details and technical optimization processes, please refer to the following documents:
 
-- [Fourier Series Devlog (KR)](./docs/fourier_series_devlog.md): 상세 구현 및 최적화 내역
-- [Fourier Implementation Plan](./docs/fourier_implementation_plan.md): 초기 설계 및 구조 정리 계획
-- [Fourier Task History](./docs/fourier_task_history.md): 전체 작업 이력
+- [Fourier Series Devlog (KR)](./docs/fourier_series_devlog.md): Implementation details and optimization history
+- [Fourier Implementation Plan](./docs/fourier_implementation_plan.md): Initial design and structure plan
+- [Fourier Task History](./docs/fourier_task_history.md): Complete task history
 
 ---
 
