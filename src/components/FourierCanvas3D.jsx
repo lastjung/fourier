@@ -62,13 +62,18 @@ const FourierCanvas3D = () => {
   useEffect(() => {
     if (!mountRef.current) return;
 
+    // Cleanup previous renderer if any (React StrictMode fix)
+    while (mountRef.current.firstChild) {
+      mountRef.current.removeChild(mountRef.current.firstChild);
+    }
+
     // 1. Scene Setup
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050510);
-    scene.fog = new THREE.FogExp2(0x050510, 0.0015);
+    scene.background = new THREE.Color(0x020205); // Very dark, barely visible bg
+    scene.fog = new THREE.FogExp2(0x020205, 0.001);
 
     // 2. Camera Setup
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 5000);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000); // Far clip increased
     camera.position.set(400, 300, 400); 
     camera.lookAt(0, 0, 0);
 
@@ -76,20 +81,31 @@ const FourierCanvas3D = () => {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
-    mountRef.current.innerHTML = ''; // Clear previous
     mountRef.current.appendChild(renderer.domElement);
 
     // 4. Lights
     scene.add(new THREE.AmbientLight(0x404040, 3));
-    const pointLight = new THREE.PointLight(0xffffff, 1.5);
+    const pointLight = new THREE.PointLight(0xffffff, 2);
     pointLight.position.set(200, 200, 200);
     scene.add(pointLight);
 
     // 5. Data Gen (DFT)
-    const currentPattern = settingsRef.current.pattern;
-    const seedPoints = currentPattern === 'knot' 
-      ? generateTrefoilKnot(256, 120) 
-      : generateLissajous3D(256, 150);
+    const currentPattern = settingsRef.current.pattern || 'lissajous';
+    let seedPoints = [];
+    try {
+        seedPoints = currentPattern === 'knot' 
+          ? generateTrefoilKnot(256, 120) 
+          : generateLissajous3D(256, 150);
+    } catch (e) {
+        console.error("Pattern gen failed, fallback", e);
+        seedPoints = generateTrefoilKnot(256, 100);
+    }
+
+    // Safety check
+    if (!seedPoints || seedPoints.length === 0) {
+        console.warn("No seed points generated");
+        return;
+    }
 
     const xSignal = seedPoints.map(p => ({ re: p.x, im: 0 }));
     const ySignal = seedPoints.map(p => ({ re: p.y, im: 0 }));
@@ -105,7 +121,7 @@ const FourierCanvas3D = () => {
     }
 
     // 6. Visualization Objects
-    const MAX_BUFFER = 5000;
+    const MAX_BUFFER = 10000; // Increased buffer
     const trailGeometry = new THREE.BufferGeometry();
     const positions = new Float32Array(MAX_BUFFER * 3);
     trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -115,7 +131,7 @@ const FourierCanvas3D = () => {
     const trailLine = new THREE.Line(trailGeometry, trailMaterial);
     scene.add(trailLine);
 
-    const penGeometry = new THREE.SphereGeometry(4, 16, 16);
+    const penGeometry = new THREE.SphereGeometry(6, 16, 16); // Larger pen
     const penMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, emissive: 0xffffff });
     const pen = new THREE.Mesh(penGeometry, penMaterial);
     scene.add(pen);
@@ -139,25 +155,30 @@ const FourierCanvas3D = () => {
         trailRef.current = []; 
       }
 
-      const limit = currentSettings.epicycles;
+      const limit = currentSettings.epicycles && currentSettings.epicycles > 0 ? currentSettings.epicycles : fX.length;
+      
       const x = computeFourierPoint(fX, timeRef.current, Math.PI / 2, limit);
       const y = computeFourierPoint(fY, timeRef.current, Math.PI / 2, limit);
       const z = computeFourierPoint(fZ, timeRef.current, Math.PI / 2, limit);
       
+      // Safety check for NaN
+      if (isNaN(x) || isNaN(y) || isNaN(z)) return;
+
       const currentPoint = new THREE.Vector3(x, y, z);
       pen.position.copy(currentPoint);
 
-      // Trail Update (Ring-like buffer logic for visual purity)
+      // Trail Update
       trailRef.current.push(currentPoint);
       if (trailRef.current.length > currentSettings.trailLength) trailRef.current.shift();
 
       const posAttribute = trailLine.geometry.attributes.position;
       const posArray = posAttribute.array;
+      let ptr = 0;
       for (let i = 0; i < trailRef.current.length; i++) {
         const p = trailRef.current[i];
-        posArray[i * 3] = p.x;
-        posArray[i * 3 + 1] = p.y;
-        posArray[i * 3 + 2] = p.z;
+        posArray[ptr++] = p.x;
+        posArray[ptr++] = p.y;
+        posArray[ptr++] = p.z;
       }
       
       trailLine.geometry.setDrawRange(0, trailRef.current.length);
@@ -174,9 +195,6 @@ const FourierCanvas3D = () => {
       } else {
         const lookVec = new THREE.Vector3(0, 0, 0);
         camera.lookAt(lookVec);
-        // Simple zoom manual handle could be added here if needed, 
-        // but for now relying on auto-orbit or static.
-        // If static, we ensure it's at 'zoom' distance
         const dir = camera.position.clone().sub(lookVec).normalize();
         camera.position.copy(dir.multiplyScalar(currentSettings.zoom));
       }
@@ -197,8 +215,9 @@ const FourierCanvas3D = () => {
     return () => {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationId);
-      if (mountRef.current && renderer.domElement) {
-         // mountRef.current.removeChild(renderer.domElement); // innerHTML = '' handles this safer
+      // Strict cleanup
+      if (mountRef.current) {
+        mountRef.current.innerHTML = '';
       }
       trailGeometry.dispose();
       trailMaterial.dispose();
