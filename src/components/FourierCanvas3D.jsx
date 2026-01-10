@@ -232,16 +232,17 @@ const FourierCanvas3D = () => {
   }, [settings.pattern]); // Re-run effect only when pattern changes
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
+    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#111' }}>
+      {/* Three.js Container - explicitly low z-index */}
+      <div ref={mountRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }} />
       
-      {/* 3D UI Overlay */}
+      {/* 3D UI Overlay - explicitly high z-index */}
       <div style={{
         position: 'absolute',
         top: '20px',
         left: '20px',
         color: 'white',
-        zIndex: 10,
+        zIndex: 9999,
         pointerEvents: 'none',
         textShadow: '0 0 10px rgba(0,0,0,0.5)'
       }}>
@@ -251,7 +252,7 @@ const FourierCanvas3D = () => {
         </p>
       </div>
 
-      {/* Settings Panel */}
+      {/* Settings Panel - explicitly high z-index */}
       <div style={{
         position: 'absolute',
         top: '60px',
@@ -264,7 +265,7 @@ const FourierCanvas3D = () => {
         border: '1px solid rgba(255, 255, 255, 0.1)',
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
         color: 'white',
-        zIndex: 50
+        zIndex: 9999
       }}>
         <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>Visual Settings</h3>
         
