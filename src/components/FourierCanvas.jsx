@@ -540,7 +540,16 @@ const FourierCanvas = () => {
           
           {/* Audio controls in panel */}
           <div className="control-section">
-            <div className="section-title">Audio</div>
+            <div className="section-header-row">
+              <div className="section-title">Audio</div>
+              <button 
+                className={`panel-audio-toggle ${isAudioEnabled ? 'active' : ''}`} 
+                onClick={toggleAudio}
+                title={isAudioEnabled ? 'Disable Audio' : 'Enable Audio'}
+              >
+                {isAudioEnabled ? '🔊' : '🔇'}
+              </button>
+            </div>
             <div className="control-group">
               <label>Volume: {Math.round(masterVolume * 100)}%</label>
               <input type="range" min="0" max="1" step="0.01" value={masterVolume} onChange={(e) => setMasterVolume(parseFloat(e.target.value))} />
