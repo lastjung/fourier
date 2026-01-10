@@ -1,10 +1,10 @@
-import FourierCanvas from './components/FourierCanvas'
+import FourierCanvas2D from './components/FourierCanvas2D'
 import './index.css'
 
 function App() {
   return (
     <div className="app-container">
-      <FourierCanvas />
+      <FourierCanvas2D />
     </div>
   )
 }

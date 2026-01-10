@@ -37,9 +37,13 @@ const FourierCanvas = () => {
     waveform: 'sine'
   });
 
+  /* State for mobile settings panel toggle */
+  const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
+
   // Keep refs in sync for render loop
   useEffect(() => { globalSettingsRef.current = globalSettings; }, [globalSettings]);
   useEffect(() => { userPathRef.current = userPath; }, [userPath]);
+  useEffect(() => { previewCenterRef.current = previewCenter; }, [previewCenter]);
   useEffect(() => { previewCenterRef.current = previewCenter; }, [previewCenter]);
   
   const skipPoints = 2; 
@@ -281,9 +285,67 @@ const FourierCanvas = () => {
         return;
       }
 
-      if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+      const currentWidth = window.innerWidth;
+      const currentHeight = window.innerHeight;
+
+      // Check if resize needed
+      if (canvas.width !== currentWidth || canvas.height !== currentHeight) {
+        
+        // Prevent division by zero
+        if (canvas.width > 0 && canvas.height > 0) {
+          const widthRatio = currentWidth / canvas.width;
+          const heightRatio = currentHeight / canvas.height;
+          
+          // Use the smaller ratio to keep aspect ratio of the drawing, 
+          // or use specific axis ratio to stretch? User wants "canvas ratio", let's scale X and Y independently to match screen
+          // Actually, keeping aspect ratio is usually better for shapes like circles.
+          // let's scale coordinates by their respective axis, but size (amp) by min ratio.
+          
+          const scaleRatio = Math.min(widthRatio, heightRatio);
+
+          // 1. Resize visual instances (Mutate directly for speed in render loop)
+          instancesRef.current.forEach(inst => {
+            inst.center.x *= widthRatio;
+            inst.center.y *= heightRatio;
+            
+            // Fourier amplitudes (size)
+            inst.fourier.forEach(f => f.amp *= scaleRatio);
+            
+            // Path history
+            inst.path.forEach(p => {
+              p.x *= widthRatio;
+              p.y *= heightRatio;
+            });
+          });
+
+          // 2. Resize user drawing path
+          if (userPathRef.current.length > 0) {
+            userPathRef.current.forEach(p => {
+              p.x *= widthRatio;
+              p.y *= heightRatio;
+            });
+            setUserPath([...userPathRef.current]); // Sync State
+          }
+           
+          // 3. Resize drawing buffer
+          if (drawingPathRef.current && drawingPathRef.current.length > 0) {
+            drawingPathRef.current.forEach(p => {
+              p.x *= widthRatio;
+              p.y *= heightRatio;
+            });
+          }
+
+          // 4. Resize preview center
+          if (previewCenterRef.current) {
+             previewCenterRef.current.x *= widthRatio;
+             previewCenterRef.current.y *= heightRatio;
+             setPreviewCenter({ ...previewCenterRef.current });
+          }
+        }
+
+        // Apply new size
+        canvas.width = currentWidth;
+        canvas.height = currentHeight;
       }
 
       const fadeAlpha = Math.max(0.01, 0.2 / (settings.persistence / 2));
@@ -505,18 +567,6 @@ const FourierCanvas = () => {
         <div className="instruction-overlay">Summon harmonics or draw your own</div>
       )}
 
-      <div className="seed-gallery" onPointerDown={e => e.stopPropagation()}>
-        <button onClick={() => generateSeed(['lissajous', 'hypotrochoid', 'infinity', 'ellipse', 'cassini', lastManualPath ? 'custom' : 'lissajous'][Math.floor(Math.random()*6)])} className="random-btn">Shuffle & Drop 🎲</button>
-        <button onClick={() => generateSeed('lissajous')}>Lissajous</button>
-        <button onClick={() => generateSeed('hypotrochoid')}>Spirograph</button>
-        <button onClick={() => generateSeed('infinity')}>Infinity</button>
-        <button onClick={() => generateSeed('ellipse')}>Ellipse ⬮</button>
-        <button onClick={() => generateSeed('cassini')}>Cassini ⬭</button>
-        <button onClick={() => generateSeed('custom')} className={!lastManualPathRef.current && !lastManualPath ? 'disabled' : ''}>
-          My Drawing ✨
-        </button>
-      </div>
-
       <div className="ui-overlay">
         <header className="header" onPointerDown={e => e.stopPropagation()}>
           <div className="header-top">
@@ -524,19 +574,52 @@ const FourierCanvas = () => {
               <h1>Fourier Oracle</h1>
               <p>Multi-instance harmonic synthesis</p>
             </div>
-            <div className="header-actions">
-              <button className={`icon-btn audio-toggle ${isAudioEnabled ? 'active' : ''}`} onClick={toggleAudio} title={isAudioEnabled ? 'Audio ON' : 'Audio OFF'}>
-                {isAudioEnabled ? '🔊' : '🔇'}
-              </button>
-              <button className="icon-btn reset-btn" onClick={resetAll} title="Clear All & Restart">
-                🔄
+            {/* Mobile Only Settings Toggle */}
+            <div className="header-actions mobile-only-actions">
+               <button 
+                className={`icon-btn settings-toggle ${isMobileSettingsOpen ? 'active' : ''}`} 
+                onClick={() => setIsMobileSettingsOpen(!isMobileSettingsOpen)}
+                title="Open Settings"
+              >
+                {isMobileSettingsOpen ? '✕' : '☰'}
               </button>
             </div>
           </div>
         </header>
 
-        <div className="controls" onPointerDown={e => e.stopPropagation()}>
-          <div className="panel-header">Settings</div>
+        {/* New Floating Dock at Bottom Center */}
+        <div className="floating-dock-container" onPointerDown={e => e.stopPropagation()}>
+          <div className="floating-dock">
+            <button onClick={() => {
+              const opts = ['lissajous', 'hypotrochoid', 'infinity', 'ellipse', 'cassini'];
+              if (lastManualPath) opts.push('custom');
+              generateSeed(opts[Math.floor(Math.random() * opts.length)]);
+            }} className="dock-btn random" title="Random Shuffle">
+              🎲 <span className="btn-label">Shuffle</span>
+            </button>
+            <div className="dock-divider"></div>
+            <button onClick={() => generateSeed('lissajous')} className="dock-btn" title="Lissajous Curve">Lissajous</button>
+            <button onClick={() => generateSeed('hypotrochoid')} className="dock-btn" title="Spirograph">Spirograph</button>
+            <button onClick={() => generateSeed('infinity')} className="dock-btn" title="Infinity Loop">Infinity</button>
+            <button onClick={() => generateSeed('ellipse')} className="dock-btn" title="Simple Ellipse">Ellipse</button>
+            <button onClick={() => generateSeed('cassini')} className="dock-btn" title="Cassini Oval">Cassini</button>
+            <div className="dock-divider"></div>
+            <button onClick={() => generateSeed('custom')} className={`dock-btn special ${!lastManualPathRef.current && !lastManualPath ? 'disabled' : ''}`} title="Redraw Your Path">
+              ✨ <span className="btn-label">My Art</span>
+            </button>
+            <div className="dock-divider"></div>
+            <button className="dock-btn reset-text" onClick={resetAll} title="Clear Canvas & Restart">
+              🔄 Reset
+            </button>
+          </div>
+        </div>
+
+        <div className={`controls ${isMobileSettingsOpen ? 'mobile-open' : ''}`} onPointerDown={e => e.stopPropagation()}>
+          <div className="panel-header">
+            Settings 
+            {/* Close button for mobile inside panel */}
+            <span className="mobile-close-btn" onClick={() => setIsMobileSettingsOpen(false)}>✕</span>
+          </div>
           
           {/* Audio controls in panel */}
           <div className="control-section">

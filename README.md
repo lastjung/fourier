@@ -15,11 +15,18 @@
 - **Graphics**: HTML5 Canvas API
 - **Mathematics**: Discrete Fourier Transform (DFT) Logic (Custom Implementation)
 
-## 📁 Project Structure (Proposed)
+## 📁 Project Structure
 
-- `src/components/FourierCanvas/`: 핵심 렌더링 엔진 부품
-- `src/lib/dft.js`: 푸리에 변환 수학 로직
+- `src/components/FourierCanvas2D.jsx`: 2D 푸리에 시각화 및 UI 핵심 컴포넌트 (Stable)
+- `src/components/FourierCanvas3D.jsx`: 3D 푸리에 시각화 컴포넌트 (Planned)
+- `src/lib/dft.js`: 이산 푸리에 변환(DFT) 수학 로직
 - `src/styles/`: 전역 테마 및 디자인 시스템
+
+## 🚀 Recent Updates (v1.1 - Mobile UX Refined)
+
+- **Mobile First Designs**: 햄버거 메뉴(☰), 드롭다운 설정 패널 등 모바일 친화적 UI 전면 개편.
+- **Responsive Canvas**: 화면 크기 변화에 따라 시드 그림과 궤적의 크기가 실시간으로 자동 축소/확대되는 반응형 로직 구현.
+- **Enhanced Dock**: 모바일 최적화된 하단 플로팅 도크 및 개선된 셔플(Shuffle) 로직 적용.
 
 ## 📄 Documentation
 
