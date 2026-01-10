@@ -152,7 +152,7 @@ const FourierCanvas3D = () => {
       timeRef.current += dt;
       if (timeRef.current > Math.PI * 2) {
         timeRef.current = 0;
-        trailRef.current = []; 
+        trailRef.current = []; // Clear trail on cycle complete
       }
 
       const limit = currentSettings.epicycles && currentSettings.epicycles > 0 ? currentSettings.epicycles : fX.length;
@@ -161,30 +161,34 @@ const FourierCanvas3D = () => {
       const y = computeFourierPoint(fY, timeRef.current, Math.PI / 2, limit);
       const z = computeFourierPoint(fZ, timeRef.current, Math.PI / 2, limit);
       
-      // Safety check for NaN
       if (isNaN(x) || isNaN(y) || isNaN(z)) return;
 
       const currentPoint = new THREE.Vector3(x, y, z);
       pen.position.copy(currentPoint);
 
-      // Trail Update
+      // Simple & Robust Trail Update
       trailRef.current.push(currentPoint);
-      if (trailRef.current.length > currentSettings.trailLength) trailRef.current.shift();
+      
+      // Limit trail length strictly
+      while (trailRef.current.length > currentSettings.trailLength) {
+        trailRef.current.shift();
+      }
 
-      const posAttribute = trailLine.geometry.attributes.position;
-      const posArray = posAttribute.array;
-      let ptr = 0;
-      for (let i = 0; i < trailRef.current.length; i++) {
+      // Update Geometry strictly
+      const positions = trailLine.geometry.attributes.position.array;
+      const pointCount = trailRef.current.length;
+      
+      for (let i = 0; i < pointCount; i++) {
         const p = trailRef.current[i];
-        posArray[ptr++] = p.x;
-        posArray[ptr++] = p.y;
-        posArray[ptr++] = p.z;
+        positions[i * 3] = p.x;
+        positions[i * 3 + 1] = p.y;
+        positions[i * 3 + 2] = p.z;
       }
       
-      trailLine.geometry.setDrawRange(0, trailRef.current.length);
-      posAttribute.needsUpdate = true;
+      trailLine.geometry.setDrawRange(0, pointCount);
+      trailLine.geometry.attributes.position.needsUpdate = true;
 
-      // Camera
+      // Camera Orbit
       if (currentSettings.cameraSpeed > 0) {
         const camTime = Date.now() * 0.0005 * currentSettings.cameraSpeed;
         const radius = currentSettings.zoom;
