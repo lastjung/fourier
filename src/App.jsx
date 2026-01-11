@@ -4,7 +4,7 @@ import FourierCanvas3D from './components/FourierCanvas3D'
 import './index.css'
 
 function App() {
-  const [mode, setMode] = useState('2D');
+  const [mode, setMode] = useState('3D'); // 기본 모드: 3D
 
   return (
     <div className="app-container">
