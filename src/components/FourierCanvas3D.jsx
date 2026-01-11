@@ -4,26 +4,26 @@ import { dft } from '../lib/dft';
 
 const FourierCanvas3D = () => {
   const mountRef = useRef(null);
+  const sceneRef = useRef(null); // Access scene from anywhere
   const timeRef = useRef(0);
-  const trailRef = useRef([]);
-  const trailLineRef = useRef(null); // For direct geometry access
+  const instancesRef = useRef([]); // 2D와 동일한 멀티 인스턴스 관리
+  const trailLineRef = useRef(null); 
   const [isAnimating, setIsAnimating] = useState(true);
+  const [instances, setInstances] = useState([]); // Reactive state for UI
 
-
-
-  // Settings State & Ref
+  // Settings State & Ref (2D와 최대한 일치)
   const [settings, setSettings] = useState({
-    pattern: 'lissajous', // Default to Lissajous as requested
-    speed: 0.08,  // 2D와 동일한 범위
-    persistence: 2.0,    // Trail length multiplier (x1000)
-    pathWeight: 2,        // Line thickness
-    shapeScale: 1.0,      // Seed size multiplier
-    cameraSpeed: 0.5,
-    epicycles: 0, 
-    zoom: 100,            // Zoom percent (100% = base distance)
-    delay: 0,             // Sequence Delay (sec) - 0 for immediate start
-    displayDuration: 1.3,  // Seed Display Time (sec)
-    resetKey: 0            // For forcing re-render
+    speed: 0.08,
+    persistence: 2.0,
+    pathWeight: 1.8,
+    shapeScale: 1.0,
+    cameraSpeed: 0.1,
+    rotationSpeed: 0.0,    // Camera Self-Rotation (Roll)
+    epicycles: 0,
+    zoom: 100,
+    spread: 600,         // Spatial Spread (2D와 동일)
+    delay: 0.5,          // Adjusted for 3D responsiveness
+    displayDuration: 1.0
   });
   const settingsRef = useRef(settings);
 
@@ -35,9 +35,9 @@ const FourierCanvas3D = () => {
     const points = [];
     for (let i = 0; i < N; i++) {
       const t = (i / N) * Math.PI * 2;
-      const x = Math.sin(t) + 2 * Math.sin(2 * t);
-      const y = Math.cos(t) - 2 * Math.cos(2 * t);
-      const z = -Math.sin(3 * t);
+      const x = (Math.sin(t) + 2 * Math.sin(2 * t)) / 3;
+      const y = (Math.cos(t) - 2 * Math.cos(2 * t)) / 3;
+      const z = (-Math.sin(3 * t)) / 3;
       points.push(new THREE.Vector3(x * scale, y * scale, z * scale));
     }
     return points;
@@ -63,9 +63,9 @@ const FourierCanvas3D = () => {
     for (let i = 0; i < N; i++) {
       const t = (i / N) * Math.PI * 2 * q; // Full loop
       const r = 3 + Math.cos(q * t / q * p); // Simplified radius
-      const x = scale * Math.cos(p * t / q) * (1 + 0.5 * Math.cos(q * t / q));
-      const y = scale * Math.sin(p * t / q) * (1 + 0.5 * Math.cos(q * t / q));
-      const z = scale * 0.5 * Math.sin(q * t / q);
+      const x = (scale * Math.cos(p * t / q) * (1 + 0.5 * Math.cos(q * t / q))) / 1.5;
+      const y = (scale * Math.sin(p * t / q) * (1 + 0.5 * Math.cos(q * t / q))) / 1.5;
+      const z = (scale * 0.5 * Math.sin(q * t / q)) / 1.5;
       points.push(new THREE.Vector3(x, y, z));
     }
     return points;
@@ -82,22 +82,119 @@ const FourierCanvas3D = () => {
     return val;
   };
 
+  // Helper for cleanup
+  const removeInstanceObjects = (inst) => {
+    const scene = sceneRef.current;
+    if (!scene || !inst.objects) return;
+    const { trailLine, trailGeom, trailMat, seedLine, seedGeom, seedMat } = inst.objects;
+    scene.remove(trailLine);
+    scene.remove(seedLine);
+    trailGeom.dispose();
+    trailMat.dispose();
+    seedGeom.dispose();
+    seedMat.dispose();
+  };
+
+  const addInstance = (type) => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+
+    // 1. Generate Points
+    // Normalize basic scale to around 150 for consistency
+    const scale = 150 * settingsRef.current.shapeScale;
+    let seedPoints = [];
+    if (type === 'knot') seedPoints = generateTrefoilKnot(256, scale);
+    else if (type === 'torusknot25') seedPoints = generateTorusKnot25(256, scale);
+    else seedPoints = generateLissajous3D(256, scale);
+
+    // 2. DFT
+    const xSignal = seedPoints.map(p => ({ re: p.x, im: 0 }));
+    const ySignal = seedPoints.map(p => ({ re: p.y, im: 0 }));
+    const zSignal = seedPoints.map(p => ({ re: p.z, im: 0 }));
+    const fX = dft(xSignal).sort((a, b) => b.amp - a.amp);
+    const fY = dft(ySignal).sort((a, b) => b.amp - a.amp);
+    const fZ = dft(zSignal).sort((a, b) => b.amp - a.amp);
+
+    // 3. Create Objects
+    const hue = Math.random() * 360;
+    const color = new THREE.Color(`hsl(${hue}, 100%, 65%)`);
+    
+    const MAX_BUFFER = 10000;
+    const trailGeom = new THREE.BufferGeometry();
+    trailGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_BUFFER * 3), 3));
+    trailGeom.setDrawRange(0, 0); // Start empty to prevent default white dots at origin
+    const trailMat = new THREE.LineBasicMaterial({ 
+      color, 
+      linewidth: 1, 
+      transparent: true, 
+      opacity: settingsRef.current.pathWeight / 5 
+    });
+    const trailLine = new THREE.Line(trailGeom, trailMat);
+    trailLine.frustumCulled = false;
+    scene.add(trailLine);
+
+    const seedGeom = new THREE.BufferGeometry().setFromPoints(seedPoints);
+    const seedMat = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 2, transparent: true, opacity: 0.5 });
+    const seedLine = new THREE.LineLoop(seedGeom, seedMat);
+    
+    // Position (Spatial Spread)
+    const spread = settingsRef.current.spread;
+    const center = {
+      x: (Math.random() - 0.5) * spread,
+      y: (Math.random() - 0.5) * spread,
+      z: (Math.random() - 0.5) * (spread * 0.5) // Depth spread slightly tighter
+    };
+    seedLine.position.set(center.x, center.y, center.z);
+    scene.add(seedLine);
+
+    // 4. Instance Object
+    const inst = {
+      id: Date.now(),
+      fX, fY, fZ,
+      time: 0,
+      trail: [],
+      center,
+      hue,
+      reversed: Math.random() < 0.5, // 50% 확률로 반전된 회전 (2D와 동일)
+      objects: {
+        trailLine, trailGeom, trailMat,
+        seedLine, seedGeom, seedMat
+      },
+      delayProgress: 0 // To handle Sequence Delay
+    };
+
+    // Auto-hide seed
+    setTimeout(() => { seedLine.visible = false; }, settingsRef.current.displayDuration * 1000);
+
+    // Add to ref and state
+    if (instancesRef.current.length >= 20) {
+       const toRemove = instancesRef.current[0];
+       removeInstanceObjects(toRemove);
+       instancesRef.current = instancesRef.current.slice(1);
+    }
+
+    instancesRef.current = [...instancesRef.current, inst];
+    setInstances([...instancesRef.current]);
+  };
+
   useEffect(() => {
     if (!mountRef.current) return;
 
-    // Cleanup previous renderer if any (React StrictMode fix)
+    // 0. Cleanup and Reset for StrictMode
     while (mountRef.current.firstChild) {
       mountRef.current.removeChild(mountRef.current.firstChild);
     }
+    instancesRef.current = [];
+    setInstances([]);
 
     // 1. Scene Setup
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000); // 검정 배경
-    scene.fog = null; // 안개 제거
+    scene.background = new THREE.Color(0x020205); // Darker space
+    sceneRef.current = scene;
 
     // 2. Camera Setup
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000); // Far clip increased
-    camera.position.set(400, 300, 400); 
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 20000);
+    camera.position.set(600, 400, 600); 
     camera.lookAt(0, 0, 0);
 
     // 3. Renderer
@@ -109,154 +206,77 @@ const FourierCanvas3D = () => {
     // 4. Lights
     scene.add(new THREE.AmbientLight(0x404040, 3));
     const pointLight = new THREE.PointLight(0xffffff, 2);
-    pointLight.position.set(200, 200, 200);
+    pointLight.position.set(500, 500, 500);
     scene.add(pointLight);
 
-    // 5. Data Gen (DFT)
-    const currentPattern = settingsRef.current.pattern || 'lissajous';
-    let seedPoints = [];
-    const baseScale = 120;
-    const scale = baseScale * settingsRef.current.shapeScale;
-    try {
-        if (currentPattern === 'knot') {
-          seedPoints = generateTrefoilKnot(256, scale);
-        } else if (currentPattern === 'torusknot25') {
-          seedPoints = generateTorusKnot25(256, scale);
-        } else {
-          seedPoints = generateLissajous3D(256, scale);
-        }
-    } catch (e) {
-        console.error("Pattern gen failed, fallback", e);
-        seedPoints = generateTrefoilKnot(256, scale);
-    }
+    // 5. Initial Seed (2D와 일치시키기 위해 자동 시작)
+    addInstance('lissajous');
 
-    // Safety check
-    if (!seedPoints || seedPoints.length === 0) {
-        console.warn("No seed points generated");
-        return;
-    }
-
-    const xSignal = seedPoints.map(p => ({ re: p.x, im: 0 }));
-    const ySignal = seedPoints.map(p => ({ re: p.y, im: 0 }));
-    const zSignal = seedPoints.map(p => ({ re: p.z, im: 0 }));
-
-    const fX = dft(xSignal).sort((a, b) => b.amp - a.amp);
-    const fY = dft(ySignal).sort((a, b) => b.amp - a.amp);
-    const fZ = dft(zSignal).sort((a, b) => b.amp - a.amp);
-
-    // Init epicycles max
-    if (settingsRef.current.epicycles === 0) {
-      setSettings(prev => ({ ...prev, epicycles: fX.length }));
-    }
-
-    // 6. Visualization Objects
-    const MAX_BUFFER = 10000; // Increased buffer
-    const trailGeometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(MAX_BUFFER * 3);
-    trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    trailGeometry.setDrawRange(0, 0);
-
-    const trailMaterial = new THREE.LineBasicMaterial({ 
-      color: 0xff00ff, 
-      linewidth: settingsRef.current.pathWeight 
-    });
-    const trailLine = new THREE.Line(trailGeometry, trailMaterial);
-    trailLine.frustumCulled = false;
-    trailLineRef.current = trailLine; // Save ref for reset
-    scene.add(trailLine);
-
-    const penGeometry = new THREE.SphereGeometry(6, 16, 16); // Larger pen
-    const penMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, emissive: 0xffffff });
-    const pen = new THREE.Mesh(penGeometry, penMaterial);
-    scene.add(pen);
-
-    // 바닥 그리드 제거됨
-
-    // ★ SEED VISUALIZATION - Show original seed shape as yellow line
-    const seedGeometry = new THREE.BufferGeometry().setFromPoints(seedPoints);
-    const seedMaterial = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 2 });
-    const seedLine = new THREE.LineLoop(seedGeometry, seedMaterial);
-    scene.add(seedLine);
-
-    // Seed auto-hide after displayDuration
-    const hideTimeout = setTimeout(() => {
-      seedLine.visible = false;
-    }, settingsRef.current.displayDuration * 1000);
-
-    // Animation start delay
-    let animationStarted = false;
-    const startTimeout = setTimeout(() => {
-      animationStarted = true;
-    }, settingsRef.current.delay * 1000);
-
-    // Animation Loop
+    // 6. Animation Loop
     let animationId;
-    const baseDt = (Math.PI * 2) / fX.length; 
-
     const animate = () => {
       animationId = requestAnimationFrame(animate);
-      
-      const currentSettings = settingsRef.current;
-      const dt = baseDt * currentSettings.speed;
-      
-      // DEBUG
-      if (Math.random() < 0.01) { // 1% 확률로 로그 (너무 많은 출력 방지)
-        console.log('speed:', currentSettings.speed, 'dt:', dt, 'time:', timeRef.current);
-      }
+      const s = settingsRef.current;
 
-      timeRef.current += dt;
-      if (timeRef.current > Math.PI * 2) {
-        timeRef.current = 0;
-        trailRef.current = []; // Clear trail on cycle complete
-      }
+      // Update Instances
+      instancesRef.current.forEach(inst => {
+        // Handle Sequence Delay (simple version)
+        if (inst.delayProgress < s.delay) {
+          inst.delayProgress += 1/60; // 60fps approx
+          return;
+        }
 
-      const limit = currentSettings.epicycles && currentSettings.epicycles > 0 ? currentSettings.epicycles : fX.length;
-      
-      const x = computeFourierPoint(fX, timeRef.current, Math.PI / 2, limit);
-      const y = computeFourierPoint(fY, timeRef.current, Math.PI / 2, limit);
-      const z = computeFourierPoint(fZ, timeRef.current, Math.PI / 2, limit);
-      
-      if (isNaN(x) || isNaN(y) || isNaN(z)) return;
+        const baseDt = (Math.PI * 2) / inst.fX.length;
+        const dt = (inst.reversed ? -1 : 1) * baseDt * s.speed;
+        inst.time = (inst.time + dt + Math.PI * 2) % (Math.PI * 2);
 
-      const currentPoint = new THREE.Vector3(x, y, z);
-      pen.position.copy(currentPoint);
+        const limit = s.epicycles > 0 ? s.epicycles : inst.fX.length;
+        const x = computeFourierPoint(inst.fX, inst.time, Math.PI / 2, limit);
+        const y = computeFourierPoint(inst.fY, inst.time, Math.PI / 2, limit);
+        const z = computeFourierPoint(inst.fZ, inst.time, Math.PI / 2, limit);
+        
+        const pos = new THREE.Vector3(x + inst.center.x, y + inst.center.y, z + inst.center.z);
 
-      // Simple & Robust Trail Update
-      trailRef.current.push(currentPoint);
-      
-      // Limit trail length strictly
-      const trailLength = Math.floor(currentSettings.persistence * 1000);
-      while (trailRef.current.length > trailLength) {
-        trailRef.current.shift();
-      }
+        // Trail Update
+        inst.trail.push(pos);
+        const maxTrail = Math.floor(inst.fX.length * s.persistence);
+        while (inst.trail.length > maxTrail) inst.trail.shift();
 
-      // Update Geometry strictly
-      const positions = trailLine.geometry.attributes.position.array;
-      const pointCount = trailRef.current.length;
-      
-      for (let i = 0; i < pointCount; i++) {
-        const p = trailRef.current[i];
-        positions[i * 3] = p.x;
-        positions[i * 3 + 1] = p.y;
-        positions[i * 3 + 2] = p.z;
-      }
-      
-      trailLine.geometry.setDrawRange(0, pointCount);
-      trailLine.geometry.attributes.position.needsUpdate = true;
+        const positions = inst.objects.trailGeom.attributes.position.array;
+        const count = inst.trail.length;
+        for (let i = 0; i < count; i++) {
+          const p = inst.trail[i];
+          positions[i * 3] = p.x;
+          positions[i * 3 + 1] = p.y;
+          positions[i * 3 + 2] = p.z;
+        }
+        inst.objects.trailLine.geometry.setDrawRange(0, count);
+        inst.objects.trailLine.geometry.attributes.position.needsUpdate = true;
+        
+        // Update intensity (since WebGL doesn't support linewidth > 1)
+        inst.objects.trailMat.opacity = s.pathWeight / 5;
+      });
 
       // Camera Orbit
-      if (currentSettings.cameraSpeed > 0) {
-        const camTime = Date.now() * 0.0005 * currentSettings.cameraSpeed;
-        const radius = 40000 / currentSettings.zoom; // 100% = 400, 200% = 200 (closer = bigger)
+      if (s.cameraSpeed !== 0) {
+        const camTime = Date.now() * 0.0005 * s.cameraSpeed;
+        const radius = s.zoom === 0 ? 0.1 : s.zoom; // Use zoom value directly as distance
         camera.position.x = Math.cos(camTime) * radius;
         camera.position.z = Math.sin(camTime) * radius;
-        camera.position.y = Math.sin(camTime * 0.5) * 200 + 300; 
+        // Float within a range proportional to the current radius
+        camera.position.y = Math.sin(camTime * 0.5) * (Math.abs(radius) * 0.3) + (Math.abs(radius) * 0.5); 
         camera.lookAt(0, 0, 0);
       } else {
-        const lookVec = new THREE.Vector3(0, 0, 0);
-        camera.lookAt(lookVec);
-        const dir = camera.position.clone().sub(lookVec).normalize();
-        camera.position.copy(dir.multiplyScalar(40000 / currentSettings.zoom));
+        camera.lookAt(0, 0, 0);
+        const radius = s.zoom === 0 ? 0.1 : s.zoom;
+        const dir = camera.position.clone().normalize();
+        camera.position.copy(dir.multiplyScalar(radius));
+      }
+
+      // Self Rotation (Roll)
+      if (s.rotationSpeed !== 0) {
+        timeRef.current += 0.01 * s.rotationSpeed;
+        camera.rotateZ(timeRef.current);
       }
 
       renderer.render(scene, camera);
@@ -264,29 +284,16 @@ const FourierCanvas3D = () => {
     animate();
 
     const handleResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      camera.aspect = w / h;
+      camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+      renderer.setSize(window.innerWidth, window.innerHeight);
     };
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationId);
-      clearTimeout(hideTimeout);
-      clearTimeout(startTimeout);
-      // Strict cleanup
-      if (mountRef.current) {
-        mountRef.current.innerHTML = '';
-      }
-      trailGeometry.dispose();
-      trailMaterial.dispose();
-      penGeometry.dispose();
-      penMaterial.dispose();
-      seedGeometry.dispose();
-      seedMaterial.dispose();
+      instancesRef.current.forEach(removeInstanceObjects);
       renderer.dispose();
     };
   }, []); // 2D와 동일: 한 번만 실행, 재실행 안 함
@@ -308,7 +315,7 @@ const FourierCanvas3D = () => {
       }}>
         <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, letterSpacing: '2px', color: '#00f2ff' }}>3D ORACLE</h1>
         <p style={{ margin: 0, opacity: 0.8, fontWeight: 300 }}>
-          Seed: {settings.pattern === 'knot' ? 'Trefoil Knot' : 'Lissajous 3D'}
+          Multi-instance harmonic synthesis (3D)
         </p>
       </div>
 
@@ -371,11 +378,11 @@ const FourierCanvas3D = () => {
           />
         </div>
 
-        {/* 4. Path Weight */}
+        {/* 4. Path Intensity (Weight substitute for 3D) */}
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
-            <span>Path Weight</span>
-            <span style={{ color: '#00f2ff' }}>{settings.pathWeight}px</span>
+            <span>Path Intensity</span>
+            <span style={{ color: '#00f2ff' }}>{settings.pathWeight}</span>
           </label>
           <input 
             type="range" min="1" max="5" step="0.5" 
@@ -399,7 +406,21 @@ const FourierCanvas3D = () => {
           />
         </div>
 
-        {/* 6. Sequence Delay */}
+        {/* 6. Spatial Spread */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
+            <span>Spatial Spread</span>
+            <span style={{ color: '#00f2ff' }}>{settings.spread}px</span>
+          </label>
+          <input 
+            type="range" min="0" max="2500" step="10" 
+            value={settings.spread}
+            onChange={(e) => setSettings(prev => ({ ...prev, spread: parseInt(e.target.value) }))}
+            style={{ width: '100%', accentColor: '#00f2ff' }}
+          />
+        </div>
+
+        {/* 7. Sequence Delay */}
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
             <span>Sequence Delay</span>
@@ -413,7 +434,7 @@ const FourierCanvas3D = () => {
           />
         </div>
 
-        {/* 7. Seed Display Time */}
+        {/* 8. Seed Display Time */}
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
             <span>Seed Display Time</span>
@@ -427,30 +448,44 @@ const FourierCanvas3D = () => {
           />
         </div>
 
-        {/* 8. Camera Rotation (3D only) */}
+        {/* 9. Orbit Speed */}
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
-            <span>Camera Rotation</span>
+            <span>Orbit Speed</span>
             <span style={{ color: '#00f2ff' }}>{settings.cameraSpeed.toFixed(1)}</span>
           </label>
           <input 
-            type="range" min="0" max="3" step="0.1" 
+            type="range" min="-3" max="3" step="0.1" 
             value={settings.cameraSpeed}
             onChange={(e) => setSettings(prev => ({ ...prev, cameraSpeed: parseFloat(e.target.value) }))}
             style={{ width: '100%', accentColor: '#00f2ff' }}
           />
         </div>
 
-        {/* 9. Zoom (3D only) */}
-        <div style={{ marginBottom: '0' }}>
+        {/* 10. Camera Rotation Speed */}
+        <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
-            <span>Zoom</span>
-            <span style={{ color: '#00f2ff' }}>{settings.zoom}%</span>
+            <span>Camera Rotation Speed</span>
+            <span style={{ color: '#00f2ff' }}>{settings.rotationSpeed.toFixed(1)}</span>
           </label>
           <input 
-            type="range" min="50" max="300" step="10" 
+            type="range" min="-3" max="3" step="0.1" 
+            value={settings.rotationSpeed}
+            onChange={(e) => setSettings(prev => ({ ...prev, rotationSpeed: parseFloat(e.target.value) }))}
+            style={{ width: '100%', accentColor: '#00f2ff' }}
+          />
+        </div>
+
+        {/* 11. Zoom (Distance) */}
+        <div style={{ marginBottom: '0' }}>
+          <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
+            <span>Zoom (distance to origin)</span>
+            <span style={{ color: '#00f2ff' }}>{settings.zoom}</span>
+          </label>
+          <input 
+            type="range" min="-500" max="500" step="10" 
             value={settings.zoom}
-            onChange={(e) => setSettings(prev => ({ ...prev, zoom: parseInt(e.target.value) }))}
+            onChange={(e) => setSettings(prev => ({ ...prev, zoom: parseFloat(e.target.value) }))}
             style={{ width: '100%', accentColor: '#00f2ff' }}
           />
         </div>
@@ -467,20 +502,24 @@ const FourierCanvas3D = () => {
         zIndex: 9999
       }}>
         {[
-          { id: 'lissajous', name: 'Lissajous 3D', emoji: '🌀' },
-          { id: 'knot', name: 'Trefoil Knot', emoji: '🪢' },
-          { id: 'torusknot25', name: 'Torus (2,5)', emoji: '🔮' }
+          { id: 'random', name: 'Shuffle', emoji: '🎲' },
+          { id: 'lissajous', name: 'Lissajous', emoji: '🌀' },
+          { id: 'knot', name: 'Trefoil', emoji: '🪢' },
+          { id: 'torusknot25', name: 'Torus', emoji: '🔮' }
         ].map(p => (
           <button
             key={p.id}
-            onClick={() => setSettings(prev => ({ ...prev, pattern: p.id, speed: 0.08 }))}
+            onClick={() => {
+              if (p.id === 'random') {
+                const types = ['lissajous', 'knot', 'torusknot25'];
+                addInstance(types[Math.floor(Math.random() * types.length)]);
+              } else {
+                addInstance(p.id);
+              }
+            }}
             style={{
-              background: settings.pattern === p.id 
-                ? 'rgba(0, 242, 255, 0.3)' 
-                : 'rgba(0, 0, 0, 0.6)',
-              border: settings.pattern === p.id 
-                ? '2px solid #00f2ff' 
-                : '1px solid rgba(255, 255, 255, 0.2)',
+              background: 'rgba(0, 0, 0, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
               color: 'white',
               padding: '12px 20px',
               borderRadius: '12px',
@@ -497,13 +536,9 @@ const FourierCanvas3D = () => {
         {/* Reset Button */}
         <button
           onClick={() => {
-            // Direct geometry clear + stop animation
-            timeRef.current = 0;
-            trailRef.current = [];
-            if (trailLineRef.current) {
-              trailLineRef.current.geometry.setDrawRange(0, 0);
-            }
-            setSettings(prev => ({ ...prev, speed: 0 })); // Stop animation
+            instancesRef.current.forEach(removeInstanceObjects);
+            instancesRef.current = [];
+            setInstances([]);
           }}
           style={{
             background: 'rgba(255, 100, 100, 0.3)',
