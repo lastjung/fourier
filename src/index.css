@@ -606,4 +606,46 @@ input[type="range"]::-webkit-slider-thumb {
   }
 }
 
+/* ========================================
+   3D Canvas Mobile Styles
+   ======================================== */
 
+/* 3D Settings Panel - 기본 (Desktop) */
+.settings-panel-3d {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* 3D Mobile Hamburger Button - 기본 숨김 */
+.mobile-settings-toggle {
+  display: none !important;
+}
+
+/* 3D Mobile Responsive */
+@media (max-width: 768px) {
+  /* 3D 햄버거 버튼 표시 */
+  .mobile-settings-toggle {
+    display: flex !important;
+  }
+
+  /* 3D 설정 패널 - 기본 숨김 */
+  .settings-panel-3d {
+    pointer-events: none;
+    opacity: 0;
+    transform: translateX(100%); /* 오른쪽으로 숨김 */
+    position: absolute !important;
+    top: 60px !important;
+    right: 10px !important;
+    width: calc(100% - 20px) !important;
+    max-width: 320px !important;
+    max-height: 70vh;
+    overflow-y: auto;
+    z-index: 9998 !important;
+  }
+
+  /* 3D 설정 패널 - 열림 상태 */
+  .settings-panel-3d.mobile-open {
+    pointer-events: auto;
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

@@ -571,21 +571,33 @@ const FourierCanvas = () => {
         <header className="header" onPointerDown={e => e.stopPropagation()}>
           <div className="header-top">
             <div className="header-title">
-              <h1>Fourier Oracle</h1>
+              <h1>2D Fourier</h1>
               <p>Multi-instance harmonic synthesis</p>
-            </div>
-            {/* Mobile Only Settings Toggle */}
-            <div className="header-actions mobile-only-actions">
-               <button 
-                className={`icon-btn settings-toggle ${isMobileSettingsOpen ? 'active' : ''}`} 
-                onClick={() => setIsMobileSettingsOpen(!isMobileSettingsOpen)}
-                title="Open Settings"
-              >
-                {isMobileSettingsOpen ? '✕' : '☰'}
-              </button>
             </div>
           </div>
         </header>
+
+        {/* Mobile Hamburger Button - 3D와 동일한 스타일 */}
+        <button
+          className="mobile-settings-toggle"
+          onClick={() => setIsMobileSettingsOpen(!isMobileSettingsOpen)}
+          style={{
+            display: 'none', // CSS에서 모바일에서만 보임
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: 'rgba(0, 242, 255, 0.2)',
+            border: '1px solid rgba(0, 242, 255, 0.5)',
+            color: 'white',
+            padding: '10px 14px',
+            borderRadius: '8px',
+            fontSize: '1.2rem',
+            cursor: 'pointer',
+            zIndex: 10000
+          }}
+        >
+          {isMobileSettingsOpen ? '✕' : '☰'}
+        </button>
 
         {/* New Floating Dock at Bottom Center */}
         <div className="floating-dock-container" onPointerDown={e => e.stopPropagation()}>

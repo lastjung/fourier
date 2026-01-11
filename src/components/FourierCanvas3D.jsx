@@ -10,21 +10,25 @@ const FourierCanvas3D = () => {
   const trailLineRef = useRef(null); 
   const [isAnimating, setIsAnimating] = useState(true);
   const [instances, setInstances] = useState([]); // Reactive state for UI
+  const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false); // Mobile settings toggle
 
-  // Settings State & Ref (2D와 최대한 일치)
-  const [settings, setSettings] = useState({
-    speed: 0.08,
+  // Default Settings (for reset)
+  const DEFAULT_SETTINGS = {
+    speed: 0.25,
     persistence: 2.0,
     pathWeight: 1.8,
     shapeScale: 1.0,
-    cameraSpeed: 0.1,
-    rotationSpeed: 0.0,    // Camera Self-Rotation (Roll)
+    cameraSpeed: 0.0,
+    rotationSpeed: 0.5,
     epicycles: 0,
     zoom: 100,
-    spread: 600,         // Spatial Spread (2D와 동일)
-    delay: 0.5,          // Adjusted for 3D responsiveness
+    spread: 600,
+    delay: 0.5,
     displayDuration: 1.0
-  });
+  };
+
+  // Settings State & Ref (2D와 최대한 일치)
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const settingsRef = useRef(settings);
 
   // Sync ref
@@ -71,6 +75,49 @@ const FourierCanvas3D = () => {
     return points;
   };
 
+  // Helix (DNA 나선)
+  const generateHelix = (N = 512, scale = 120) => {
+    const points = [];
+    const turns = 4; // 회전 수
+    for (let i = 0; i < N; i++) {
+      const t = (i / N) * Math.PI * 2 * turns;
+      const x = scale * 0.5 * Math.cos(t);
+      const y = scale * 0.5 * Math.sin(t);
+      const z = scale * (i / N - 0.5); // -0.5 ~ 0.5 범위
+      points.push(new THREE.Vector3(x, y, z));
+    }
+    return points;
+  };
+
+  // Butterfly Curve 3D
+  const generateButterfly3D = (N = 512, scale = 120) => {
+    const points = [];
+    for (let i = 0; i < N; i++) {
+      const t = (i / N) * Math.PI * 12; // 6 cycles for full butterfly
+      const r = Math.exp(Math.cos(t)) - 2 * Math.cos(4 * t) - Math.pow(Math.sin(t / 12), 5);
+      const x = scale * 0.3 * r * Math.sin(t);
+      const y = scale * 0.3 * r * Math.cos(t);
+      const z = scale * 0.2 * Math.sin(t * 2); // Z축 깊이
+      points.push(new THREE.Vector3(x, y, z));
+    }
+    return points;
+  };
+
+  // Spherical Spiral (구면 나선)
+  const generateSphericalSpiral = (N = 512, scale = 120) => {
+    const points = [];
+    const turns = 8;
+    for (let i = 0; i < N; i++) {
+      const t = (i / N) * Math.PI; // 0 ~ π
+      const phi = turns * 2 * Math.PI * (i / N);
+      const x = scale * 0.5 * Math.sin(t) * Math.cos(phi);
+      const y = scale * 0.5 * Math.sin(t) * Math.sin(phi);
+      const z = scale * 0.5 * Math.cos(t);
+      points.push(new THREE.Vector3(x, y, z));
+    }
+    return points;
+  };
+
   // Compute Fourier Point
   const computeFourierPoint = (fourier, t, phaseShift = 0, limit = 0) => {
     let val = 0;
@@ -105,6 +152,9 @@ const FourierCanvas3D = () => {
     let seedPoints = [];
     if (type === 'knot') seedPoints = generateTrefoilKnot(256, scale);
     else if (type === 'torusknot25') seedPoints = generateTorusKnot25(256, scale);
+    else if (type === 'helix') seedPoints = generateHelix(256, scale);
+    else if (type === 'butterfly') seedPoints = generateButterfly3D(256, scale);
+    else if (type === 'spherical') seedPoints = generateSphericalSpiral(256, scale);
     else seedPoints = generateLissajous3D(256, scale);
 
     // 2. DFT
@@ -116,8 +166,16 @@ const FourierCanvas3D = () => {
     const fZ = dft(zSignal).sort((a, b) => b.amp - a.amp);
 
     // 3. Create Objects
-    const hue = Math.random() * 360;
-    const color = new THREE.Color(`hsl(${hue}, 100%, 65%)`);
+    // 4배수 인스턴스: 눈에 확 띄는 네온 팔레트
+    const ACCENT_COLORS = ['#ffffff', '#00ffff', '#ff00ff', '#ffff00', '#00ff00'];
+    const isAccent = (instancesRef.current.length + 1) % 4 === 0;
+    const hue = Math.random() * 360; // 항상 정의
+    let color;
+    if (isAccent) {
+      color = new THREE.Color(ACCENT_COLORS[Math.floor(Math.random() * ACCENT_COLORS.length)]);
+    } else {
+      color = new THREE.Color(`hsl(${hue}, 100%, 65%)`);
+    }
     
     const MAX_BUFFER = 10000;
     const trailGeom = new THREE.BufferGeometry();
@@ -142,7 +200,7 @@ const FourierCanvas3D = () => {
     const center = {
       x: (Math.random() - 0.5) * spread,
       y: (Math.random() - 0.5) * spread,
-      z: (Math.random() - 0.5) * (spread * 0.5) // Depth spread slightly tighter
+      z: (Math.random() - 0.5) * spread // Z축 spread도 X, Y와 동일하게
     };
     seedLine.position.set(center.x, center.y, center.z);
     scene.add(seedLine);
@@ -167,7 +225,7 @@ const FourierCanvas3D = () => {
     setTimeout(() => { seedLine.visible = false; }, settingsRef.current.displayDuration * 1000);
 
     // Add to ref and state
-    if (instancesRef.current.length >= 20) {
+    if (instancesRef.current.length >= 24) {
        const toRemove = instancesRef.current[0];
        removeInstanceObjects(toRemove);
        instancesRef.current = instancesRef.current.slice(1);
@@ -194,8 +252,16 @@ const FourierCanvas3D = () => {
 
     // 2. Camera Setup
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 20000);
-    camera.position.set(600, 400, 600); 
+    camera.position.set(0, 0, 100); 
     camera.lookAt(0, 0, 0);
+
+    // Random rotation axis (random, random, 0) - XY 평면 위의 임의 방향
+    let rotationAxis = new THREE.Vector3(
+      Math.random() - 0.5,
+      Math.random() - 0.5,
+      0
+    ).normalize();
+    let accumulatedAngle = 0; // 누적 회전 각도 추적
 
     // 3. Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -209,8 +275,11 @@ const FourierCanvas3D = () => {
     pointLight.position.set(500, 500, 500);
     scene.add(pointLight);
 
-    // 5. Initial Seed (2D와 일치시키기 위해 자동 시작)
-    addInstance('lissajous');
+    // 5. Initial Seed - 시작 시 랜덤 24개 생성 (Shuffle x 2)
+    const types = ['lissajous', 'knot', 'torusknot25', 'helix', 'butterfly', 'spherical'];
+    for (let i = 0; i < 24; i++) {
+      addInstance(types[Math.floor(Math.random() * types.length)]);
+    }
 
     // 6. Animation Loop
     let animationId;
@@ -267,16 +336,28 @@ const FourierCanvas3D = () => {
         camera.position.y = Math.sin(camTime * 0.5) * (Math.abs(radius) * 0.3) + (Math.abs(radius) * 0.5); 
         camera.lookAt(0, 0, 0);
       } else {
-        camera.lookAt(0, 0, 0);
+        // lookAt 제거 - 카메라가 정면만 응시하며 Yaw 회전
         const radius = s.zoom === 0 ? 0.1 : s.zoom;
         const dir = camera.position.clone().normalize();
         camera.position.copy(dir.multiplyScalar(radius));
       }
 
-      // Self Rotation (Roll)
+      // Self Rotation - 랜덤 축 (random, random, 0) 기준 회전
       if (s.rotationSpeed !== 0) {
-        timeRef.current += 0.01 * s.rotationSpeed;
-        camera.rotateZ(timeRef.current);
+        const delta = 0.005 * s.rotationSpeed;
+        accumulatedAngle += Math.abs(delta);
+        
+        // 2바퀴 (4π) 후 회전축 변경
+        if (accumulatedAngle >= Math.PI * 4) {
+          rotationAxis = new THREE.Vector3(
+            Math.random() - 0.5,
+            Math.random() - 0.5,
+            0
+          ).normalize();
+          accumulatedAngle = 0;
+        }
+        
+        camera.rotateOnAxis(rotationAxis, delta);
       }
 
       renderer.render(scene, camera);
@@ -313,28 +394,68 @@ const FourierCanvas3D = () => {
         pointerEvents: 'none',
         textShadow: '0 0 10px rgba(0,0,0,0.5)'
       }}>
-        <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, letterSpacing: '2px', color: '#00f2ff' }}>3D ORACLE</h1>
+        <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, letterSpacing: '2px', color: '#00f2ff' }}>3D Fourier</h1>
         <p style={{ margin: 0, opacity: 0.8, fontWeight: 300 }}>
-          Multi-instance harmonic synthesis (3D)
+          Multi-instance harmonic synthesis
         </p>
       </div>
 
-      {/* Settings Panel - explicitly high z-index */}
-      <div style={{
-        position: 'absolute',
-        top: '60px',
-        right: '20px',
-        width: '280px',
-        background: 'rgba(10, 10, 20, 0.85)',
-        backdropFilter: 'blur(12px)',
-        borderRadius: '16px',
-        padding: '20px',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
-        color: 'white',
-        zIndex: 9999
-      }}>
-        <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>Visual Settings</h3>
+      {/* Mobile Hamburger Button - 우측 상단 배치 */}
+      <button
+        className="mobile-settings-toggle"
+        onClick={() => setIsMobileSettingsOpen(!isMobileSettingsOpen)}
+        style={{
+          display: 'none', // CSS에서 모바일에서만 보임
+          position: 'absolute',
+          top: '20px',
+          right: '20px',
+          background: 'rgba(0, 242, 255, 0.2)',
+          border: '1px solid rgba(0, 242, 255, 0.5)',
+          color: 'white',
+          padding: '10px 14px',
+          borderRadius: '8px',
+          fontSize: '1.2rem',
+          cursor: 'pointer',
+          zIndex: 10000
+        }}
+      >
+        {isMobileSettingsOpen ? '✕' : '☰'}
+      </button>
+
+      {/* Settings Panel - 모바일에서 className으로 토글 */}
+      <div 
+        className={`settings-panel-3d ${isMobileSettingsOpen ? 'mobile-open' : ''}`}
+        style={{
+          position: 'absolute',
+          top: '60px',
+          right: '20px',
+          width: '280px',
+          background: 'rgba(10, 10, 20, 0.85)',
+          backdropFilter: 'blur(12px)',
+          borderRadius: '16px',
+          padding: '20px',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+          color: 'white',
+          zIndex: 9999
+        }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 16px 0', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem' }}>Visual Settings</h3>
+          <button
+            onClick={() => setSettings(DEFAULT_SETTINGS)}
+            style={{
+              background: 'rgba(255, 100, 100, 0.3)',
+              border: '1px solid rgba(255, 100, 100, 0.5)',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '6px',
+              fontSize: '0.7rem',
+              cursor: 'pointer'
+            }}
+          >
+            Reset
+          </button>
+        </div>
         
         {/* 1. Detail (Epicycles) */}
         <div style={{ marginBottom: '16px' }}>
@@ -451,7 +572,7 @@ const FourierCanvas3D = () => {
         {/* 9. Orbit Speed */}
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
-            <span>Orbit Speed</span>
+            <span>Camera Orbit Speed</span>
             <span style={{ color: '#00f2ff' }}>{settings.cameraSpeed.toFixed(1)}</span>
           </label>
           <input 
@@ -511,8 +632,10 @@ const FourierCanvas3D = () => {
             key={p.id}
             onClick={() => {
               if (p.id === 'random') {
-                const types = ['lissajous', 'knot', 'torusknot25'];
-                addInstance(types[Math.floor(Math.random() * types.length)]);
+                const types = ['lissajous', 'knot', 'torusknot25', 'helix', 'butterfly', 'spherical'];
+                for (let i = 0; i < 12; i++) {
+                  addInstance(types[Math.floor(Math.random() * types.length)]);
+                }
               } else {
                 addInstance(p.id);
               }
